@@ -1,0 +1,1093 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { 
+  X, 
+  Clock, 
+  Loader2, 
+  RefreshCw, 
+  Edit2, 
+  Check, 
+  XCircle, 
+  TrendingUp,
+  Info,
+  Scissors
+} from "lucide-react"
+import { useTrading } from "@/contexts/TradingContext"
+import { usePositions, useClosePosition } from "@/hooks/use-trading"
+import { Position } from "@/lib/types"
+import { normalizePositions, formatPrice, formatPnL, getPnLColor } from "@/lib/utils-trading"
+import { enhancedTradingService } from "@/lib/services"
+import { useToast } from "@/hooks/use-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+
+function PositionsTable() {
+  const { activeAccount, refreshData } = useTrading()
+  const { data: positionsData, isLoading, error, refetch, clearCache } = usePositions(activeAccount?.id)
+  const closePosition = useClosePosition()
+  const [closingPositions, setClosingPositions] = useState<Set<number>>(new Set())
+  const [lastUpdate, setLastUpdate] = useState<string>('')
+  
+  // Phase 5 Enhancements
+  const { toast } = useToast()
+  const [editingSL, setEditingSL] = useState<number | null>(null)
+  const [editingTP, setEditingTP] = useState<number | null>(null)
+  const [newSL, setNewSL] = useState<string>('')
+  const [newTP, setNewTP] = useState<string>('')
+  const [updatingPosition, setUpdatingPosition] = useState<number | null>(null)
+  const [detailsModalPosition, setDetailsModalPosition] = useState<Position | null>(null)
+  const [partialCloseModal, setPartialCloseModal] = useState<Position | null>(null)
+  const [partialCloseLots, setPartialCloseLots] = useState<string>('0.01')
+
+  // Update SL/TP handlers
+  const handleUpdateStopLoss = async (positionId: number) => {
+    setUpdatingPosition(positionId)
+    try {
+      // Parse the value - if empty or invalid, send null to clear it
+      let stopLossValue: number | null = null;
+      
+      if (newSL && newSL.trim() !== '') {
+        const parsed = parseFloat(newSL.trim());
+        if (!isNaN(parsed) && parsed > 0) {
+          stopLossValue = parsed;
+        }
+      }
+      
+      console.log('Stop Loss Input:', newSL);
+      console.log('Parsed Stop Loss Value:', stopLossValue);
+      console.log('Sending to API:', { positionId, stopLossValue });
+      
+      await enhancedTradingService.updateStopLoss(positionId, stopLossValue)
+      toast({
+        title: "Stop Loss Updated",
+        description: stopLossValue ? `Stop loss updated to ${stopLossValue}` : "Stop loss cleared",
+      })
+      setEditingSL(null)
+      setNewSL('')
+      // Clear cached positions and refetch to ensure UI shows the updated SL immediately
+      try {
+        if (clearCache) clearCache()
+      } catch {
+        // noop
+      }
+      await refetch()
+      // Also refresh the shared TradingContext so other components (details modal, pages) update
+      try {
+        if (refreshData) await refreshData()
+      } catch (err) {
+        console.warn('refreshData failed', err)
+      }
+    } catch (error) {
+      console.error('Stop loss update error:', error)
+      toast({
+        title: "Update Failed",
+        description: "Failed to update stop loss",
+        variant: "destructive"
+      })
+    } finally {
+      setUpdatingPosition(null)
+    }
+  }
+
+  const handleUpdateTakeProfit = async (positionId: number) => {
+    setUpdatingPosition(positionId)
+    try {
+      // Parse the value - if empty or invalid, send null to clear it
+      let takeProfitValue: number | null = null;
+      
+      if (newTP && newTP.trim() !== '') {
+        const parsed = parseFloat(newTP.trim());
+        if (!isNaN(parsed) && parsed > 0) {
+          takeProfitValue = parsed;
+        }
+      }
+      
+      console.log('Take Profit Input:', newTP);
+      console.log('Parsed Take Profit Value:', takeProfitValue);
+      console.log('Sending to API:', { positionId, takeProfitValue });
+      
+      await enhancedTradingService.updateTakeProfit(positionId, takeProfitValue)
+      toast({
+        title: "Take Profit Updated",
+        description: takeProfitValue ? `Take profit updated to ${takeProfitValue}` : "Take profit cleared",
+      })
+      setEditingTP(null)
+      setNewTP('')
+      // Clear cached positions and refetch to ensure UI shows the updated TP immediately
+      try {
+        if (clearCache) clearCache()
+      } catch {
+        // noop
+      }
+      await refetch()
+      // Also refresh the shared TradingContext so other components (details modal, pages) update
+      try {
+        if (refreshData) await refreshData()
+      } catch (err) {
+        console.warn('refreshData failed', err)
+      }
+    } catch (error) {
+      console.error('Take profit update error:', error)
+      toast({
+        title: "Update Failed",
+        description: "Failed to update take profit",
+        variant: "destructive"
+      })
+    } finally {
+      setUpdatingPosition(null)
+    }
+  }
+
+  // Handle real-time position updates via WebSocket
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'positions_update' || data.type === 'realtime_positions_update') {
+          // Refresh positions when real-time updates are received
+          refetch()
+          setLastUpdate(new Date().toLocaleTimeString())
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error)
+      }
+    }
+
+    // Connect to WebSocket if available
+    if (typeof window !== 'undefined' && window.WebSocket) {
+      try {
+        const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3002')
+        ws.addEventListener('message', handleWebSocketMessage)
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected for positions updates')
+        }
+
+        return () => {
+          ws.removeEventListener('message', handleWebSocketMessage)
+          ws.close()
+        }
+      } catch (error) {
+        console.error('WebSocket connection failed:', error)
+      }
+    }
+  }, [refetch])
+
+  // Normalize positions data from backend
+  const rawPositions: unknown[] = Array.isArray(positionsData) ? positionsData : ((positionsData as unknown as { data?: unknown[] })?.data || [])
+  const positions = normalizePositions(rawPositions)
+  const openPositions = positions.filter((p: Position) => p.status === 'open')
+  const pendingPositions = positions.filter((p: Position) => p.status === 'pending')
+  const closedPositions = positions.filter((p: Position) => p.status === 'closed')
+
+  const handleClosePosition = async (positionId: number) => {
+    setClosingPositions(prev => new Set([...prev, positionId]))
+    try {
+      await closePosition(positionId)
+      // Position is automatically removed from the list by the context
+    } catch (error) {
+      console.error('Failed to close position:', error)
+    } finally {
+      setClosingPositions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(positionId)
+        return newSet
+      })
+    }
+  }
+
+  const PositionRow = ({ position }: { position: Position }) => {
+    const isClosing = closingPositions.has(position.id)
+    const isEditingSL = editingSL === position.id
+    const isEditingTP = editingTP === position.id
+    const isUpdating = updatingPosition === position.id
+    
+    // Use enhanced backend fields with proper fallbacks
+    const pnl = position.status === 'open' 
+      ? (position.unrealizedPnl ?? position.profit ?? 0)
+      : (position.profit ?? 0)
+    const netPnL = position.netProfit ?? (pnl - (position.commission || 0) - (position.swap || 0))
+    const positionType = position.side
+    const volume = position.volume ?? position.lotSize ?? 0
+    const openTime = position.openTime ?? position.openedAt
+    const currentPrice = position.currentPrice ?? position.openPrice
+    
+    // Phase 5: Calculate margin usage
+  const posMaybe = position as unknown as { marginRequired?: number }
+  const marginUsed = posMaybe && typeof posMaybe.marginRequired === 'number' ? posMaybe.marginRequired : 0
+  const acctMaybe = activeAccount as unknown as { marginUsed?: number }
+  const accountMarginUsed = acctMaybe && typeof acctMaybe.marginUsed === 'number' ? acctMaybe.marginUsed : 0
+    const marginPercent = accountMarginUsed > 0 ? ((marginUsed / accountMarginUsed) * 100).toFixed(1) : '0'
+    
+    return (
+      <TableRow key={position.id} className="group hover:bg-gradient-to-r hover:from-gray-700/40 hover:to-black/60 border-b border-gray-600/30 transition-all duration-200">
+        <TableCell className="font-medium text-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="drop-shadow-sm">{position.id}</span>
+            <Badge variant={position.status === 'open' ? 'default' : 'secondary'} className="bg-gradient-to-r from-gray-600 to-black text-white border-gray-500">
+              {position.status}
+            </Badge>
+          </div>
+        </TableCell>
+        <TableCell className="text-gray-300">
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3 text-gray-400" />
+            <span className="text-xs drop-shadow-sm">
+              {openTime ? new Date(openTime).toLocaleTimeString() : '-'}
+            </span>
+          </div>
+        </TableCell>
+        <TableCell className="font-semibold">{position.symbol}</TableCell>
+        <TableCell>
+          <Badge variant={positionType === 'buy' ? 'default' : 'destructive'}>
+            {positionType?.toUpperCase() || 'UNKNOWN'}
+          </Badge>
+        </TableCell>
+        <TableCell className="font-mono text-sm">{volume}</TableCell>
+        <TableCell className="font-mono text-sm">{formatPrice(position.openPrice)}</TableCell>
+        <TableCell className="font-mono text-sm">
+          {currentPrice ? formatPrice(currentPrice) : '-'}
+        </TableCell>
+        <TableCell className="font-mono text-sm">
+          {position.status === 'closed' && position.closePrice 
+            ? formatPrice(position.closePrice) 
+            : '-'
+          }
+        </TableCell>
+        
+        {/* Phase 5: Enhanced SL with inline editing */}
+        <TableCell className="font-mono text-sm">
+          {position.status === 'open' ? (
+            <div className="flex items-center gap-1">
+              {isEditingSL ? (
+                <>
+                  <Input
+                    type="number"
+                    step="0.00001"
+                    value={newSL}
+                    onChange={(e) => setNewSL(e.target.value)}
+                    className="h-7 w-24 text-xs"
+                    placeholder="SL Price"
+                    disabled={isUpdating}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleUpdateStopLoss(position.id)
+                      } else if (e.key === 'Escape') {
+                        setEditingSL(null)
+                        setNewSL('')
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleUpdateStopLoss(position.id)}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 text-green-500" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                    onClick={() => {
+                      setEditingSL(null)
+                      setNewSL('')
+                    }}
+                    disabled={isUpdating}
+                  >
+                    <XCircle className="h-3 w-3 text-red-500" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span>{position.stopLoss ? formatPrice(position.stopLoss) : '-'}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => {
+                      setEditingSL(position.id)
+                      setNewSL(position.stopLoss?.toString() || '')
+                    }}
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : (
+            <span>{position.stopLoss ? formatPrice(position.stopLoss) : '-'}</span>
+          )}
+        </TableCell>
+        
+        {/* Phase 5: Enhanced TP with inline editing */}
+        <TableCell className="font-mono text-sm">
+          {position.status === 'open' ? (
+            <div className="flex items-center gap-1">
+              {isEditingTP ? (
+                <>
+                  <Input
+                    type="number"
+                    step="0.00001"
+                    value={newTP}
+                    onChange={(e) => setNewTP(e.target.value)}
+                    className="h-7 w-24 text-xs"
+                    placeholder="TP Price"
+                    disabled={isUpdating}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleUpdateTakeProfit(position.id)
+                      } else if (e.key === 'Escape') {
+                        setEditingTP(null)
+                        setNewTP('')
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleUpdateTakeProfit(position.id)}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 text-green-500" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                    onClick={() => {
+                      setEditingTP(null)
+                      setNewTP('')
+                    }}
+                    disabled={isUpdating}
+                  >
+                    <XCircle className="h-3 w-3 text-red-500" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span>{position.takeProfit ? formatPrice(position.takeProfit) : '-'}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => {
+                      setEditingTP(position.id)
+                      setNewTP(position.takeProfit?.toString() || '')
+                    }}
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : (
+            <span>{position.takeProfit ? formatPrice(position.takeProfit) : '-'}</span>
+          )}
+        </TableCell>
+        
+        {/* Phase 5: Enhanced Swap with daily charge info */}
+        <TableCell className="font-mono text-sm">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <div className="flex items-center gap-1">
+                  {formatPnL(position.swap)}
+                  {(position as {daysHeld?: number}).daysHeld && (position as {daysHeld?: number}).daysHeld! > 0 && (
+                    <span className="text-xs text-muted-foreground">({(position as {daysHeld?: number}).daysHeld}d)</span>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">
+                  <div>Total Swap: {formatPnL(position.swap)}</div>
+                  {(position as {dailySwapCharge?: number}).dailySwapCharge && (
+                    <div>Daily: {formatPnL((position as {dailySwapCharge?: number}).dailySwapCharge!)}</div>
+                  )}
+                  {(position as {daysHeld?: number}).daysHeld && <div>Days: {(position as {daysHeld?: number}).daysHeld}</div>}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </TableCell>
+        
+        {/* Phase 5: Enhanced Profit with margin info */}
+        <TableCell className="font-mono text-sm">
+          <div className="flex flex-col gap-1">
+            <span className={`font-semibold ${getPnLColor(pnl)}`}>
+              {formatPnL(pnl)}
+            </span>
+            {position.status === 'open' && Math.abs(netPnL - pnl) > 0.01 && (
+              <span className={`text-xs ${getPnLColor(netPnL)}`}>
+                Net: {formatPnL(netPnL)}
+              </span>
+            )}
+            {position.status === 'open' && marginUsed > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      {marginPercent}%
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs">
+                      Margin Used: ${marginUsed.toFixed(2)}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+        </TableCell>
+        
+        <TableCell>
+          {position.status === 'open' && (
+            <div className="flex items-center gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => setPartialCloseModal(position)}
+                    >
+                      <Scissors className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Partial Close</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => setDetailsModalPosition(position)}
+                    >
+                      <Info className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Position Details</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    disabled={isClosing}
+                    className="h-8 w-8 p-0"
+                  >
+                    {isClosing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Close Position</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to close position #{position.id} for {position.symbol}?
+                      Current P&L: <span className={getPnLColor(pnl)}>{formatPnL(pnl)}</span>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleClosePosition(position.id)}>
+                      Close Position
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  if (!activeAccount) {
+    return (
+      <Card className="h-full">
+        <CardContent className="flex items-center justify-center py-8">
+          <p className="text-muted-foreground">No trading account selected</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="h-full bg-gradient-to-br from-gray-800/40 to-black/60 border-2 border-gray-600/40 backdrop-blur-sm"
+          style={{
+            boxShadow: "inset 4px 4px 12px rgba(0,0,0,0.5), inset -4px -4px 12px rgba(255,255,255,0.08), 0 12px 40px rgba(0,0,0,0.4)"
+          }}>
+      <CardContent className="p-0 bg-gradient-to-br from-gray-700/20 to-black/40 h-full">
+        <Tabs defaultValue="open" className="h-full flex flex-col">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-2 py-1 border-b border-gray-600/30 gap-1 flex-shrink-0 bg-gradient-to-r from-gray-800/30 to-black/20">
+              <TabsList className="grid w-full grid-cols-3 sm:max-w-[400px] gap-1 h-8 bg-gray-800/60 border border-gray-600/40 rounded-lg">
+              <TabsTrigger value="open" className="text-xs px-3 py-1 data-[state=active]:bg-gray-600 data-[state=active]:text-white data-[state=active]:shadow-md text-gray-300 hover:text-white transition-colors rounded-md">Open ({openPositions.length})</TabsTrigger>
+              <TabsTrigger value="pending" className="text-xs px-3 py-1 data-[state=active]:bg-gray-600 data-[state=active]:text-white data-[state=active]:shadow-md text-gray-300 hover:text-white transition-colors rounded-md">Pending ({pendingPositions.length})</TabsTrigger>
+              <TabsTrigger value="history" className="text-xs px-3 py-1 data-[state=active]:bg-gray-600 data-[state=active]:text-white data-[state=active]:shadow-md text-gray-300 hover:text-white transition-colors rounded-md">History ({closedPositions.length})</TabsTrigger>
+            </TabsList>
+            
+            <div className="flex items-center gap-2">
+              {lastUpdate && (
+                <span className="text-xs text-gray-400 drop-shadow-sm">
+                  Updated: {lastUpdate}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refetch}
+                disabled={isLoading}
+                className="h-6 w-6 p-0"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-4 text-center text-red-500">
+              <p>Error loading positions: {error}</p>
+              <Button variant="outline" size="sm" onClick={refetch} className="mt-2">
+                Retry
+              </Button>
+            </div>
+          )}
+
+          <TabsContent value="open" className="mt-0 flex-1 flex flex-col overflow-auto bg-gradient-to-br from-gray-800/10 to-black/20">
+            {isLoading && positions.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+                <span className="ml-2 text-gray-300">Loading positions...</span>
+              </div>
+            ) : openPositions.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <p>No open positions</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile card list: visible on small screens - optimized for performance */}
+                <div className="sm:hidden p-2 space-y-2 flex-1 overflow-y-auto mb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 9rem)', maxHeight: 'calc(100vh - 14rem)' }}>
+                  {openPositions.slice(0, 10).map((position: Position) => (
+                    <Card key={position.id} className="p-3 min-h-[100px] bg-gradient-to-br from-gray-700/40 to-black/60 border border-gray-600/40 shadow-lg"
+                          style={{
+                            boxShadow: "inset 2px 2px 6px rgba(0,0,0,0.4), inset -1px -1px 3px rgba(255,255,255,0.1), 2px 2px 8px rgba(0,0,0,0.3)"
+                          }}>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="font-semibold text-base text-gray-200 drop-shadow-sm">{position.symbol}</div>
+                            <Badge variant={position.status === 'open' ? 'default' : 'secondary'} className="text-xs bg-gradient-to-r from-gray-600 to-black text-white border-gray-500">
+                              {position.status}
+                            </Badge>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-mono text-base font-semibold drop-shadow-sm ${getPnLColor(position.unrealizedPnl ?? position.profit ?? 0)}`}>
+                              {formatPnL(position.unrealizedPnl ?? position.profit ?? 0)}
+                            </div>
+                            <div className="text-xs text-gray-400">#{position.id}</div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-gray-400 text-xs">Type: </span>
+                            <span className="font-semibold text-gray-200">{position.side?.toUpperCase() || 'UNKNOWN'}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-gray-400 text-xs">Lots: </span>
+                            <span className="font-mono text-gray-200">{position.volume ?? position.lotSize}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-sm">
+                            <div className="text-muted-foreground">S/L: <span className="font-mono text-xs">{position.stopLoss ? formatPrice(position.stopLoss) : '-'}</span></div>
+                            <div className="text-muted-foreground">T/P: <span className="font-mono text-xs">{position.takeProfit ? formatPrice(position.takeProfit) : '-'}</span></div>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setDetailsModalPosition(position)}>
+                              <Info className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => handleClosePosition(position.id)} disabled={closingPositions.has(position.id)}>
+                              {closingPositions.has(position.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                  {openPositions.length > 10 && (
+                    <div className="text-center p-2 text-sm text-muted-foreground">
+                      Showing 10 of {openPositions.length} positions
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop/tablet table: hidden on small screens */}
+                <div className="hidden sm:block flex-1 overflow-y-auto bg-gradient-to-br from-gray-800/10 to-black/20 rounded-lg" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8rem)', maxHeight: 'calc(100vh - 12rem)' }}>
+                  <Table className="bg-gradient-to-br from-gray-700/20 to-black/40">
+                    <TableHeader className="bg-gradient-to-r from-gray-800/40 to-black/30 border-b border-gray-600/30">
+                      <TableRow className="hover:bg-transparent border-b border-gray-600/30">
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Position</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Time</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Symbol</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Type</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Lots</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Price</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Current</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Close Price</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">S/L</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">T/P</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Swap</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Profit</TableHead>
+                        <TableHead className="text-gray-300 font-semibold drop-shadow-sm">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="bg-gradient-to-br from-gray-800/20 to-black/30">
+                      {openPositions.map((position: Position) => (
+                        <PositionRow key={position.id} position={position} />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="pending" className="mt-0 flex-1 flex flex-col overflow-auto">
+            {isLoading && positions.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="ml-2">Loading positions...</span>
+              </div>
+            ) : pendingPositions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No pending positions</p>
+              </div>
+            ) : (
+              <>
+                <div className="sm:hidden p-2 space-y-2 flex-1 overflow-y-auto mb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 9rem)', maxHeight: 'calc(100vh - 14rem)' }}>
+                  {pendingPositions.slice(0, 8).map((position: Position) => (
+                    <Card key={position.id} className="p-4 min-h-[110px]">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-semibold text-lg">{position.symbol}</div>
+                            <div className="text-xs text-muted-foreground mt-1">#{position.id} • {position.side?.toUpperCase() || 'UNKNOWN'}</div>
+                          </div>
+                          <div className={`font-mono text-lg font-semibold ${getPnLColor(position.profit || 0)}`}>
+                            {formatPnL(position.profit || 0)}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="space-y-1">
+                            <div className="text-muted-foreground text-xs">Lots</div>
+                            <div className="font-mono">{position.volume ?? position.lotSize}</div>
+                            <div className="text-muted-foreground text-xs mt-2">Trigger</div>
+                            <div className="font-mono">{position.triggerPrice ?? '-'}</div>
+                          </div>
+                          <div className="space-y-1 text-right">
+                            <div className="text-muted-foreground text-xs">Time</div>
+                            <div className="text-xs">{position.openTime ? new Date(position.openTime).toLocaleTimeString() : '-'}</div>
+                            <div className="text-muted-foreground text-xs mt-2">Status</div>
+                            <div className="text-xs">{position.status}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end">
+                          <Button variant="ghost" size="sm" onClick={refetch} className="h-9 w-9 p-0" title="Refresh">
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="hidden sm:block flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8rem)', maxHeight: 'calc(100vh - 12rem)' }}>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Position</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Lots</TableHead>
+                        <TableHead>Trigger Price</TableHead>
+                        <TableHead>Profit</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingPositions.map((position: Position) => (
+                        <TableRow key={position.id} className="hover:bg-muted/50">
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <span>{position.id}</span>
+                              <Badge variant="secondary">pending</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs">{position.openTime ? new Date(position.openTime).toLocaleTimeString() : '-'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-semibold">{position.symbol}</TableCell>
+                          <TableCell>
+                            <Badge variant={position.side === 'buy' ? 'default' : 'destructive'}>
+                              {position.side?.toUpperCase() || 'UNKNOWN'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{position.volume ?? position.lotSize}</TableCell>
+                          <TableCell className="font-mono text-sm">{position.triggerPrice ? position.triggerPrice : '-'}</TableCell>
+                          <TableCell className={`font-mono text-sm font-semibold ${getPnLColor(position.profit || 0)}`}>
+                            {formatPnL(position.profit || 0)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="sm" onClick={refetch} className="h-8 w-8 p-0" title="Refresh">
+                                <RefreshCw className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-0 flex-1 flex flex-col overflow-auto">
+            {isLoading && positions.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="ml-2">Loading history...</span>
+              </div>
+            ) : closedPositions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No trading history</p>
+              </div>
+            ) : (
+              <>
+                <div className="sm:hidden p-2 space-y-2 flex-1 overflow-y-auto mb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 9rem)', maxHeight: 'calc(100vh - 14rem)' }}>
+          {closedPositions.slice(0, 15).map((position: Position) => {
+            const openTime = position.openTime || position.openedAt
+            const closeTime = position.closeTime || position.closedAt
+            const positionType = position.positionType || position.side
+            const pnl = position.profitLoss || position.profit
+
+                    const duration = closeTime && openTime
+                      ? new Date(closeTime).getTime() - new Date(openTime).getTime()
+                      : 0
+                    const durationText = duration > 0 ? `${Math.floor(duration / (1000 * 60))}m` : '-'
+
+                    return (
+                      <Card key={position.id} className="p-4 min-h-[110px]">
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-semibold text-lg">{position.symbol}</div>
+                              <div className="text-xs text-muted-foreground mt-1">#{position.id} • {positionType?.toUpperCase() || 'UNKNOWN'}</div>
+                            </div>
+                            <div className={`font-mono text-lg font-semibold ${getPnLColor(pnl)}`}>{formatPnL(pnl)}</div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <div className="text-muted-foreground text-xs">Open</div>
+                              <div className="font-mono">{formatPrice(position.openPrice)}</div>
+                              <div className="text-muted-foreground text-xs mt-2">Close</div>
+                              <div className="font-mono">{position.closePrice ? formatPrice(position.closePrice) : '-'}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-muted-foreground text-xs">Duration</div>
+                              <div className="text-xs text-muted-foreground">{durationText}</div>
+                              <div className="text-muted-foreground text-xs mt-2">S/L</div>
+                              <div className="font-mono">{position.stopLoss ? formatPrice(position.stopLoss) : '-'}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    )
+                  })}
+                </div>
+
+                <div className="hidden sm:block flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8rem)', maxHeight: 'calc(100vh - 12rem)' }}>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Position</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Lots</TableHead>
+                        <TableHead>Open Price</TableHead>
+                        <TableHead>Close Price</TableHead>
+                        <TableHead>S/L</TableHead>
+                        <TableHead>T/P</TableHead>
+                        <TableHead>Swap</TableHead>
+                        <TableHead>Profit</TableHead>
+                        <TableHead>Duration</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {closedPositions.map((position: Position) => (
+                        <TableRow key={position.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <span>{position.id}</span>
+                              <Badge variant="secondary">closed</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs">{position.openTime ? new Date(position.openTime).toLocaleTimeString() : '-'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-semibold">{position.symbol}</TableCell>
+                          <TableCell>
+                            <Badge variant={position.positionType === 'buy' ? 'default' : 'destructive'}>
+                              {(position.positionType || position.side)?.toUpperCase() || 'UNKNOWN'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{position.volume ?? position.lotSize}</TableCell>
+                          <TableCell className="font-mono text-sm">{formatPrice(position.openPrice)}</TableCell>
+                          <TableCell className="font-mono text-sm">{position.closePrice ? formatPrice(position.closePrice) : '-'}</TableCell>
+                          <TableCell className="font-mono text-sm">{position.stopLoss ? formatPrice(position.stopLoss) : '-'}</TableCell>
+                          <TableCell className="font-mono text-sm">{position.takeProfit ? formatPrice(position.takeProfit) : '-'}</TableCell>
+                          <TableCell className="font-mono text-sm">{formatPnL(position.swap)}</TableCell>
+                          <TableCell className={`font-mono text-sm font-semibold ${getPnLColor(position.profit || 0)}`}>{formatPnL(position.profit || 0)}</TableCell>
+                          <TableCell className="font-mono text-sm text-muted-foreground">{
+                            (() => {
+                              try {
+                                const closedTs = position.closedAt ? new Date(position.closedAt).getTime() : null
+                                const openedTs = position.openedAt ? new Date(position.openedAt).getTime() : (position.openTime ? new Date(position.openTime).getTime() : null)
+                                if (closedTs && openedTs && !isNaN(closedTs) && !isNaN(openedTs)) {
+                                  return `${Math.floor((closedTs - openedTs) / (1000 * 60))}m`
+                                }
+                                return '-'
+                              } catch {
+                                return '-'
+                              }
+                            })()
+                          }</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
+  </CardContent>
+      
+      {/* Phase 5: Position Details Modal */}
+      <Dialog open={!!detailsModalPosition} onOpenChange={(open) => !open && setDetailsModalPosition(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Position #{detailsModalPosition?.id} Details</DialogTitle>
+            <DialogDescription>
+              Complete information for {detailsModalPosition?.symbol}
+            </DialogDescription>
+          </DialogHeader>
+          {detailsModalPosition && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Symbol</p>
+                  <p className="font-semibold">{detailsModalPosition.symbol}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Type</p>
+                  <Badge variant={detailsModalPosition.side === 'buy' ? 'default' : 'destructive'}>
+                    {detailsModalPosition.side?.toUpperCase()}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Volume</p>
+                  <p className="font-mono">{detailsModalPosition.lotSize} lots</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Open Price</p>
+                  <p className="font-mono">{formatPrice(detailsModalPosition.openPrice)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Current Price</p>
+                  <p className="font-mono">{formatPrice(detailsModalPosition.currentPrice ?? detailsModalPosition.openPrice)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Profit/Loss</p>
+                  <p className={`font-mono font-semibold ${getPnLColor(detailsModalPosition.profit ?? 0)}`}>
+                    {formatPnL(detailsModalPosition.profit ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Commission</p>
+                  <p className="font-mono">{formatPnL(detailsModalPosition.commission || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Swap Charges</p>
+                  <p className="font-mono">{formatPnL(detailsModalPosition.swap || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Net Profit</p>
+                  <p className={`font-mono font-semibold ${getPnLColor(detailsModalPosition.netProfit ?? 0)}`}>
+                    {formatPnL(detailsModalPosition.netProfit ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Margin Used</p>
+                  <p className="font-mono">${((detailsModalPosition as {marginRequired?: number}).marginRequired || 0).toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Stop Loss</p>
+                  <p className="font-mono">{detailsModalPosition.stopLoss ? formatPrice(detailsModalPosition.stopLoss) : 'None'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Take Profit</p>
+                  <p className="font-mono">{detailsModalPosition.takeProfit ? formatPrice(detailsModalPosition.takeProfit) : 'None'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Opened At</p>
+                  <p className="text-sm">
+                    {detailsModalPosition.openedAt ? new Date(detailsModalPosition.openedAt).toLocaleString() : '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsModalPosition(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Phase 5: Partial Close Modal */}
+      <Dialog open={!!partialCloseModal} onOpenChange={(open) => !open && setPartialCloseModal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Partial Close Position</DialogTitle>
+            <DialogDescription>
+              Close part of position #{partialCloseModal?.id}
+            </DialogDescription>
+          </DialogHeader>
+          {partialCloseModal && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="partialLots">Lots to Close</Label>
+                <Input
+                  id="partialLots"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={partialCloseModal.lotSize}
+                  value={partialCloseLots}
+                  onChange={(e) => setPartialCloseLots(e.target.value)}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Available: {partialCloseModal.lotSize} lots
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Current P&L</p>
+                    <p className={`font-mono font-semibold ${getPnLColor(partialCloseModal.profit ?? 0)}`}>
+                      {formatPnL(partialCloseModal.profit ?? 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Estimated Partial P&L</p>
+                    <p className="font-mono font-semibold">
+                      {formatPnL(((partialCloseModal.profit ?? 0) * parseFloat(partialCloseLots || '0')) / partialCloseModal.lotSize)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPartialCloseModal(null)}>Cancel</Button>
+            <Button 
+              onClick={async () => {
+                // Placeholder for partial close functionality
+                toast({
+                  title: "Feature Coming Soon",
+                  description: "Partial close functionality will be available in the next update",
+                })
+                setPartialCloseModal(null)
+              }}
+            >
+              Close {partialCloseLots} Lots
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
+// Export both as named and default
+export { PositionsTable }
+export default PositionsTable
