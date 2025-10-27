@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import Portal from "@/components/portal"
-import { useRef } from 'react'
 import { useTrading } from "@/contexts/TradingContext"
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed'
 
@@ -85,27 +84,9 @@ export default function BottomStatsBar() {
     return () => window.removeEventListener('balanceUpdate', handler)
   }, [activeAccount, accountSummary])
 
-  const barRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    const setVar = () => {
-      const el = barRef.current
-      const h = el ? Math.ceil(el.getBoundingClientRect().height) : 0
-      try {
-        document.documentElement.style.setProperty('--bottom-stats-height', `${h}px`)
-      } catch {
-        // ignore in non-browser environments
-      }
-    }
-
-    setVar()
-    window.addEventListener('resize', setVar)
-    return () => window.removeEventListener('resize', setVar)
-  }, [])
-
   return (
     <Portal>
-      <div ref={barRef} className="fixed left-0 right-0 sm:bottom-12 lg:bottom-0 bottom-14 bg-gradient-to-r from-gray-900/95 via-black/90 to-gray-800/95 backdrop-blur-xl border-t border-gray-700/50 z-[10] py-2 shadow-2xl"
+      <div className="fixed left-0 right-0 sm:bottom-12 lg:bottom-0 bottom-14 bg-gradient-to-r from-gray-900/95 via-black/90 to-gray-800/95 backdrop-blur-xl border-t border-gray-700/50 z-[10] py-2 shadow-2xl"
            style={{
              boxShadow: "inset 0 1px 2px rgba(255,255,255,0.1), 0 -8px 32px rgba(0,0,0,0.3)"
            }}>
