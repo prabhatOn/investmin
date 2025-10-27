@@ -23,7 +23,7 @@ export default function WelcomePage() {
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-2">
               <TrendingUp className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">TradePro</span>
+              <span className="text-xl font-bold">Investmin</span>
             </div>
             
             <div className="flex items-center space-x-4">
@@ -64,7 +64,7 @@ export default function WelcomePage() {
       {/* Features Section */}
       <section className="container mx-auto px-4 py-16">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4">Why Choose TradePro?</h2>
+          <h2 className="text-3xl font-bold mb-4">Why Choose Investmin?</h2>
           <p className="text-muted-foreground text-lg">
             Built for traders who demand performance, reliability, and advanced features.
           </p>
@@ -139,7 +139,7 @@ export default function WelcomePage() {
           <CardHeader>
             <CardTitle className="text-2xl">Ready to Start Trading?</CardTitle>
             <CardDescription className="text-lg">
-              Join thousands of traders who trust TradePro for their trading needs.
+              Join thousands of traders who trust Investmin for their trading needs.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -162,7 +162,7 @@ export default function WelcomePage() {
       <footer className="border-t bg-background/95 backdrop-blur">
         <div className="container mx-auto px-4 py-8">
           <div className="text-center text-muted-foreground">
-            <p>&copy; 2024 TradePro. All rights reserved.</p>
+            <p>&copy; 2025 Investmin. All rights reserved.</p>
           </div>
         </div>
       </footer>

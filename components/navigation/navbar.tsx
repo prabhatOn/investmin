@@ -14,7 +14,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { LogOut, Settings, User, TrendingUp, CreditCard } from 'lucide-react'
+import { LogOut, Settings, User, CreditCard } from 'lucide-react'
+import Image from 'next/image'
 
 export function Navbar() {
   const { user, logout, isAuthenticated } = useAuth()
@@ -47,8 +48,10 @@ export function Navbar() {
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">
-              <TrendingUp className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">TradePro</span>
+              <div className="w-8 h-8 relative">
+                <Image src="/logo_mi.png" alt="InvestMin" fill className="object-contain" />
+              </div>
+              <span className="text-xl font-bold">Investmin</span>
             </Link>
             
             <div className="flex items-center space-x-4">
@@ -73,8 +76,10 @@ export function Navbar() {
       <div className="px-5 w-full">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
-            <TrendingUp className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold">TradePro</span>
+            <div className="w-8 h-8 relative">
+              <Image src="/logo_mi.png" alt="InvestMin" fill className="object-contain" />
+            </div>
+            <span className="text-xl font-bold">Investmin</span>
           </Link>
           
           <div className="flex items-end justify-end gap-3 md:gap-6">

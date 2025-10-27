@@ -18,14 +18,10 @@ export function RoutePrefetcher() {
   const router = useRouter()
 
   useEffect(() => {
-    // Prefetch routes after a short delay to avoid blocking initial load
-    const timer = setTimeout(() => {
-      ROUTES_TO_PREFETCH.forEach(route => {
-        router.prefetch(route)
-      })
-    }, 1000)
-
-    return () => clearTimeout(timer)
+    // Prefetch routes immediately for better performance
+    ROUTES_TO_PREFETCH.forEach(route => {
+      router.prefetch(route)
+    })
   }, [router])
 
   return null

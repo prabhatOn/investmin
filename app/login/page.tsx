@@ -237,7 +237,7 @@ export default function LoginPage() {
             </div>
           </div>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-            TradePro
+            Investmin
           </h1>
           <p className="text-gray-400 mt-2 text-lg">Professional Trading Platform</p>
           <div className="flex items-center justify-center mt-3 space-x-2">
@@ -411,7 +411,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center space-y-2">
           <p className="text-xs text-gray-500">
-            © 2025 TradePro. Professional Trading Platform.
+            © 2025 Investmin. Professional Trading Platform.
           </p>
           <p className="text-xs text-gray-500">
             Powered by advanced encryption and real-time security

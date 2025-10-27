@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useCallback, memo } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -33,10 +33,8 @@ const MobileNavItem = memo(({
       target.style.transform = ''
     }, 100)
     
-    // Fast navigation with minimal delay
-    setTimeout(() => {
-      router.push(href)
-    }, 50)
+    // Fast navigation without delay
+    router.push(href)
   }, [href, router])
 
   return (

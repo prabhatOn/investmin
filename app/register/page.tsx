@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, Eye, EyeOff, TrendingUp, CheckCircle, Sun, Moon } from "lucide-react"
+import { Loader2, Eye, EyeOff, CheckCircle, Sun, Moon } from "lucide-react"
+import Image from "next/image"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "next-themes"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -135,8 +136,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background/95 to-muted/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="w-full max-w-md space-y-6 relative z-10">
         {/* Theme Toggle */}
         <div className="fixed top-4 right-4">
           <Button
@@ -153,16 +154,23 @@ export default function RegisterPage() {
         {/* Logo/Brand */}
         <div className="text-center">
           <div className="flex items-center justify-center mb-4">
-            <div className="bg-primary p-3 rounded-xl shadow-lg">
-              <TrendingUp className="w-8 h-8 text-primary-foreground" />
+            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl shadow-2xl transform hover:scale-105 transition-transform duration-300 border border-gray-600/50 overflow-hidden">
+              <Image
+                src="/logo_mi.png"
+                alt="Logo"
+                width={40}
+                height={40}
+                className="object-contain"
+                priority
+              />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground">TradePro</h1>
-          <p className="text-muted-foreground mt-2">Create your trading account</p>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">Investmin</h1>
+          <p className="text-gray-400 mt-2">Create your trading account</p>
         </div>
 
         {/* Registration Form */}
-        <Card className="bg-card/50 backdrop-blur-sm border shadow-xl">
+        <Card className="bg-gray-900/80 backdrop-blur-xl border shadow-2xl border-gray-700/50">
           <CardHeader>
             <CardTitle className="text-foreground text-center">Get Started</CardTitle>
           </CardHeader>
@@ -355,7 +363,7 @@ export default function RegisterPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                className="w-full bg-gradient-to-r from-gray-700 to-black hover:from-gray-600 hover:to-gray-900 text-white font-semibold py-3"
                 disabled={isLoading || !formData.acceptTerms}
               >
                 {isLoading ? (
@@ -382,8 +390,8 @@ export default function RegisterPage() {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground">
-          © 2025 TradePro. Advanced Trading Platform.
+        <p className="text-center text-xs text-gray-500">
+          © 2025 Investmin. Advanced Trading Platform.
         </p>
       </div>
     </div>

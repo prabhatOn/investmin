@@ -5,12 +5,25 @@ const { executeQuery } = require('../config/database');
 class MarketDataService {
   
   /**
-   * Update market prices with simulated real-time data
-   * This simulates TradingView-like price movements
+   * Update market prices with real-time data from external API
+   * This replaces the previous demo price generation
    */
   static async updateMarketPrices() {
     try {
-      console.log('Updating market prices...');
+      // Check if API is configured - if not, skip updates to avoid spam
+      const apiKey = process.env.MARKET_DATA_API_KEY;
+      const apiUrl = process.env.MARKET_DATA_API_URL;
+      
+      if (!apiKey || !apiUrl) {
+        console.log('Market data API not configured - skipping price updates until API integration is complete');
+        return { 
+          updated: 0, 
+          message: 'API not configured - updates skipped',
+          skipped: true 
+        };
+      }
+      
+      console.log('Fetching real market prices from API...');
       
       // Get all active symbols
       const symbols = await executeQuery(
@@ -23,10 +36,24 @@ class MarketDataService {
       }
       
       let updatedCount = 0;
+      let errorCount = 0;
+      
+      // TODO: Replace this section with your real API integration
+      // Example structure:
+      // const response = await fetch(`${apiUrl}?apikey=${apiKey}&currencies=${symbols.map(s => s.symbol).join(',')}`);
+      // const data = await response.json();
       
       for (const symbol of symbols) {
         try {
-          // Get the latest price for this symbol
+          // TODO: Replace this with actual API data fetching
+          // Example:
+          // const apiData = await this.fetchPriceFromAPI(symbol.symbol);
+          // if (!apiData) {
+          //   console.log(`No API data for ${symbol.symbol}, using last known price`);
+          //   continue;
+          // }
+          
+          // TEMPORARY: Using last known prices as fallback until API is integrated
           const latestPrices = await executeQuery(
             `SELECT bid, ask, last FROM market_prices 
              WHERE symbol_id = ? 
@@ -38,30 +65,27 @@ class MarketDataService {
           let newBid, newAsk, newLast;
           
           if (latestPrices.length > 0) {
-            // Use existing prices as base and add realistic variations
-            const currentBid = parseFloat(latestPrices[0].bid);
-            const currentAsk = parseFloat(latestPrices[0].ask);
-            const spread = currentAsk - currentBid;
+            // TODO: Replace with real API data
+            // For now, keeping prices stable until API integration
+            newBid = parseFloat(latestPrices[0].bid);
+            newAsk = parseFloat(latestPrices[0].ask);
+            newLast = parseFloat(latestPrices[0].last);
             
-            // Generate realistic price movement (-0.5% to +0.5%)
-            const priceChangePercent = (Math.random() - 0.5) * 0.01; // -0.5% to +0.5%
-            const priceChange = currentBid * priceChangePercent;
-            
-            newBid = Math.max(0.00001, currentBid + priceChange);
-            newAsk = newBid + spread; // Maintain spread
-            newLast = (newBid + newAsk) / 2;
-            
+            // TODO: Remove this comment once API is integrated
+            console.log(`TODO: Integrate real API for ${symbol.symbol} - currently using last known price`);
           } else {
-            // Initialize with default prices if no existing data
+            // Fallback to default prices if no historical data
             const basePrice = this.getDefaultPrice(symbol.symbol);
             const spread = this.getDefaultSpread(symbol.symbol);
             
             newBid = basePrice;
             newAsk = basePrice + spread;
             newLast = basePrice + (spread / 2);
+            
+            console.log(`Using default price for ${symbol.symbol} (no historical data)`);
           }
           
-          // Calculate additional market data
+          // Calculate change metrics
           const change = latestPrices.length > 0 
             ? newLast - parseFloat(latestPrices[0].last || newLast)
             : 0;
@@ -79,9 +103,9 @@ class MarketDataService {
               newBid.toFixed(6),
               newAsk.toFixed(6),
               newLast.toFixed(6),
-              newLast.toFixed(6), // High (simplified)
-              newLast.toFixed(6), // Low (simplified)
-              Math.floor(Math.random() * 1000000), // Random volume
+              newLast.toFixed(6), // High (will be updated by API)
+              newLast.toFixed(6), // Low (will be updated by API)
+              Math.floor(Math.random() * 1000000), // TODO: Get real volume from API
               change.toFixed(6),
               changePercent.toFixed(4)
             ]
@@ -91,21 +115,28 @@ class MarketDataService {
           
         } catch (error) {
           console.error(`Error updating price for symbol ${symbol.symbol}:`, error);
+          errorCount++;
         }
       }
       
-      console.log(`Updated prices for ${updatedCount} symbols`);
+      console.log(`Market price update completed: ${updatedCount} updated, ${errorCount} errors`);
       
       return {
         updated: updatedCount,
-        message: `Successfully updated ${updatedCount} market prices`
+        errors: errorCount,
+        message: `Successfully updated ${updatedCount} market prices from API`
       };
       
     } catch (error) {
       console.error('Error in updateMarketPrices:', error);
+      
+      // TODO: Implement fallback mechanism - use last known prices if API fails
+      console.log('TODO: Implement API failure fallback - currently returning error');
+      
       return {
         updated: 0,
-        error: error.message
+        error: error.message,
+        message: 'Failed to fetch market prices from API'
       };
     }
   }

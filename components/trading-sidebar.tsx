@@ -168,16 +168,7 @@ export function TradingSidebar({ className, collapsed = false, onCollapsedChange
             <div className="flex items-center space-x-2 relative z-10">
               {!isCollapsed && (
                 <div className="flex items-center space-x-2">
-                  <div
-                    className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-inner relative overflow-hidden"
-                    style={{
-                      boxShadow:
-                        "inset 2px 2px 4px rgba(0,0,0,0.5), inset -2px -2px 4px rgba(255,255,255,0.1)",
-                    }}
-                  >
-                    <Image src="/logo_mi.png" alt="Logo" width={24} height={24} className="object-contain" />
-                  </div>
-                  <span className="font-semibold text-gray-200 drop-shadow-sm">TradePro</span>
+                 
                 </div>
               )}
             </div>
@@ -254,13 +245,13 @@ export function TradingSidebar({ className, collapsed = false, onCollapsedChange
               <div className="text-xs text-gray-400 text-center space-y-2 relative z-10">
                 <div className="flex items-center justify-center space-x-2">
                   <div
-                    className="w-6 h-6 rounded bg-gradient-to-br from-gray-600 to-black flex items-center justify-center shadow-inner"
+                    className="w-14 h-14 rounded bg-gradient-to-br from-gray-600 to-black flex items-center justify-center shadow-inner overflow-hidden"
                     style={{ boxShadow: "inset 2px 2px 4px rgba(0,0,0,0.5), inset -1px -1px 2px rgba(255,255,255,0.1)" }}
                   >
-                    <span className="text-white font-bold text-xs drop-shadow-lg">T</span>
+                    <Image src="/logo_mi.png" alt="InvestMin" width={80} height={80} className="object-contain" />
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-300 drop-shadow-sm">TradePro v2.1.0</p>
+                    <p className="font-semibold text-gray-300 drop-shadow-sm">Investmin v2.1.0</p>
                     <p className="text-gray-500">© 2025 All rights reserved</p>
                   </div>
                 </div>

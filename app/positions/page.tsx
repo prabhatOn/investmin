@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, FormEvent, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed'
 import { useTrading } from '@/contexts/TradingContext'
 import { usePositions, useClosePosition } from '@/hooks/use-trading'
@@ -118,38 +118,19 @@ export default function PositionsPage() {
 
   // Position calculations are handled in the PositionStatsBar component now.
 
-  // Handle real-time updates with useCallback to prevent re-renders
-  const handleWebSocketMessage = useCallback((event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data)
-      if (data.type === 'positions_update' || data.type === 'realtime_positions_update') {
-        refetch()
-        setLastUpdate(new Date().toLocaleTimeString())
-      }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error)
+  useEffect(() => {
+    const handlePositionsUpdate = (event: CustomEvent) => {
+      console.log('Positions update received:', event.detail)
+      refetch()
+      setLastUpdate(new Date().toLocaleTimeString())
+    }
+
+    window.addEventListener('positionsUpdate', handlePositionsUpdate as EventListener)
+
+    return () => {
+      window.removeEventListener('positionsUpdate', handlePositionsUpdate as EventListener)
     }
   }, [refetch])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.WebSocket) {
-      try {
-        const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3002')
-        ws.addEventListener('message', handleWebSocketMessage)
-        
-        ws.onopen = () => {
-          console.log('WebSocket connected for positions updates')
-        }
-
-        return () => {
-          ws.removeEventListener('message', handleWebSocketMessage)
-          ws.close()
-        }
-      } catch (error) {
-        console.error('WebSocket connection failed:', error)
-      }
-    }
-  }, [handleWebSocketMessage])
 
   // Handle position actions
   const handleClosePosition = async (positionId: number) => {
